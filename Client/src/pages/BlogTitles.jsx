@@ -15,19 +15,9 @@ const BlogTitles = () => {
 
   const [selectedCategory, setSelectedCategory] = useState("General");
   const [input, setInput] = useState("");
-  const [generatedTitles, setGeneratedTitles] = useState([]);
 
   const onSubmitHandler = async (e) => {
     e.preventDefault();
-
-    // Mock generated titles
-    const titles = [
-      `Top Trends in ${selectedCategory} for 2025`,
-      `How ${input || "AI"} is Transforming the ${selectedCategory} Industry`,
-      `Beginner’s Guide to ${selectedCategory}: What You Should Know`,
-    ];
-
-    setGeneratedTitles(titles);
   };
 
   return (
@@ -87,20 +77,14 @@ const BlogTitles = () => {
           <h2 className="text-xl font-semibold">Generated Titles</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {generatedTitles.length > 0 ? (
-            <ul className="list-disc ml-5 text-sm text-slate-700 space-y-2">
-              {generatedTitles.map((title, i) => (
-                <li key={i}>{title}</li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-sm flex flex-col items-center gap-5 text-gray-400">
-              <Hash className="w-9 h-9" />
-              <p>Enter a keyword and click "Generate Title" to get started</p>
-            </div>
-          )}
+
+        <div className="flex-1 flex justify-center items-center">
+          <div className="text-sm flex flex-col items-center gap-5 text-gray-400">
+            <Hash className="w-9 h-9" alt="Placeholder" />
+            <p>Enter a keyword and click "Generate Title" to get started</p>
+          </div>
         </div>
+
       </div>
     </div>
   );
