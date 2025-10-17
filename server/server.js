@@ -4,6 +4,8 @@ import 'dotenv/config'
 import { clerkMiddleware, requireAuth } from '@clerk/express'
 import aiRouter from './routes/aiRoutes.js';
 import connectCloudinary from './configs/cloudinary.js';
+import FormData from "form-data";
+
 
 const app = express();
 
