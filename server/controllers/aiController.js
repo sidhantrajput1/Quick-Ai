@@ -3,6 +3,8 @@ import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import axios from "axios";
 import { v2 as cloudinary} from 'cloudinary'
+import fs from 'fs'
+import pdf from "pdf-parse-fixed";
 
 const AI = new OpenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -158,8 +160,6 @@ export const generateImage = async (req, res) => {
   }
 }
 
-
-
 export const removeImageBackground = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -203,3 +203,137 @@ export const removeImageBackground = async (req, res) => {
     res.json({ success: false, message: error.message });
   }
 }
+
+
+export const removeImageObject = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const {object} = req.body;
+    const { image } = req.file;
+
+    const plan = req.plan;
+    const free_usage = req.free_usage;
+
+    // this is for testing
+    if (plan !== "premium" && free_usage >= 10) {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium subscriptions",
+      });
+    }
+
+    // this is for premium member , enable before deploy
+    // if (plan !== "premium") {
+    //   return res.json({
+    //     success: false,
+    //     message: "This feature is only available for premium subscriptions",
+    //   });
+    // }
+
+    const {public_id} = await cloudinary.uploader.upload(image.path)
+
+    const imageUrl =cloudinary.url(public_id, {
+      transformation : [{
+        effect : `gen_remove:${object}`
+      }],
+      resource_type : "image"
+    })
+
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image')
+    `;
+
+    // if (plan !== "premium") {
+    //   await clerkClient.users.updateUserMetadata(userId, {
+    //     privateMetadata: {
+    //       free_usage: free_usage + 1,
+    //     },
+    //   });
+    // }
+
+    res.json({ success: true, content: imageUrl });
+
+  } catch (error) {
+    console.error("Image Generation Error:", error.message);
+    res.json({ success: false, message: error.message });
+  }
+}
+
+export const resumeReview = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const resume = req.file;
+    const plan = req.plan;
+    const free_usage = req.free_usage;
+
+    // ⚙️ Free plan limit check (for testing)
+    if (plan !== "premium" && free_usage >= 10) {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium subscriptions",
+      });
+    }
+
+    // ⚙️ Resume size validation
+    if (resume.size > 6 * 1024 * 1024) {
+      return res.json({
+        success: false,
+        message: "Resume file size exceeds allowed size (6 MB).",
+      });
+    }
+
+    // 🧾 Read PDF file and extract text
+    const dataBuffer = fs.readFileSync(resume.path);
+    const pdfData = await pdf(dataBuffer);
+    const textContent = pdfData.text.trim();
+
+    // 🧠 AI prompt
+    const prompt = `
+    Review the following resume and provide detailed, constructive feedback.
+    Include:
+    - Strengths
+    - Weaknesses
+    - Areas of improvement
+    - Suggestions for formatting or wording
+
+    Resume Content:
+    ----------------------
+    ${textContent}
+    `;
+
+    // 🤖 Call Gemini API (via OpenAI SDK)
+    const response = await AI.chat.completions.create({
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+
+    const content = response.choices[0].message.content;
+
+    // 💾 Store result in your DB
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${prompt}, ${content}, 'Review Resume')
+    `;
+
+    // 🔁 Update free usage count for non-premium users
+    // Uncomment this block before deploy
+    /*
+    if (plan !== "premium") {
+      await clerkClient.users.updateUserMetadata(userId, {
+        privateMetadata: {
+          free_usage: free_usage + 1,
+        },
+      });
+    }
+    */
+
+    // ✅ Send response
+    res.json({ success: true, content });
+  } catch (error) {
+    console.error("Resume Review Error:", error.message);
+    res.json({ success: false, message: error.message });
+  }
+};
