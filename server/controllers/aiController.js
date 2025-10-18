@@ -2,8 +2,8 @@ import OpenAI from "openai";
 import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import axios from "axios";
-import { v2 as cloudinary} from 'cloudinary'
-import fs from 'fs'
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
 import pdf from "pdf-parse-fixed";
 
 const AI = new OpenAI({
@@ -19,7 +19,7 @@ export const generateArticle = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
-    if (plan !== "premium" && free_usage >= 10) {
+    if (plan !== "premium" && free_usage >= 50) {
       return res.json({
         success: false,
         message: "Limit reached. upgrade to continue",
@@ -65,7 +65,7 @@ export const generateBlogTitle = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
-    if (plan !== "premium" && free_usage >= 10) {
+    if (plan !== "premium" && free_usage >= 50) {
       return res.json({
         success: false,
         message: "Limit reached. upgrade to continue",
@@ -111,7 +111,7 @@ export const generateImage = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
-    if (plan !== "premium" && free_usage >= 10) {
+    if (plan !== "premium" && free_usage >= 50) {
       return res.json({
         success: false,
         message: "This feature is only available for premium subscriptions",
@@ -135,7 +135,10 @@ export const generateImage = async (req, res) => {
     );
 
     // ✅ Convert to base64 and upload to Cloudinary
-    const base64Image = `data:image/png;base64,${Buffer.from(data, "binary").toString("base64")}`;
+    const base64Image = `data:image/png;base64,${Buffer.from(
+      data,
+      "binary"
+    ).toString("base64")}`;
     const { secure_url } = await cloudinary.uploader.upload(base64Image);
 
     // ✅ Save to DB
@@ -158,36 +161,36 @@ export const generateImage = async (req, res) => {
     console.error("Image Generation Error:", error.message);
     res.json({ success: false, message: error.message });
   }
-}
+};
 
 export const removeImageBackground = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { image } = req.file;
+    const image = req.file;
 
     const plan = req.plan;
     const free_usage = req.free_usage;
 
-    if (plan !== "premium" && free_usage >= 10) {
+    if (plan !== "premium" && free_usage >= 50) {
       return res.json({
         success: false,
         message: "This feature is only available for premium subscriptions",
       });
     }
 
-    const {secure_url} = await cloudinary.uploader.upload(image.path, {
-      transformation : [
+    const { secure_url } = await cloudinary.uploader.upload(image.path, {
+      transformation: [
         {
-          effect : 'background_removal',
-          background_removal  : 'remove_the_background '
-        }
-      ]
-    })
+          effect: "background_removal",
+          background_removal: "remove_the_background ",
+        },
+      ],
+    });
 
     await sql`
-      INSERT INTO creations (user_id, prompt, content, type, publish)
-      VALUES (${userId}, "Remove background from image", ${secure_url}, 'image')
-    `;
+  INSERT INTO creations (user_id, prompt, content, type, publish)
+  VALUES (${userId}, ${"Remove background from image"}, ${secure_url}, 'image', false)
+`;
 
     // if (plan !== "premium") {
     //   await clerkClient.users.updateUserMetadata(userId, {
@@ -202,20 +205,20 @@ export const removeImageBackground = async (req, res) => {
     console.error("Image Generation Error:", error.message);
     res.json({ success: false, message: error.message });
   }
-}
-
+};
 
 export const removeImageObject = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const {object} = req.body;
-    const { image } = req.file;
+    const { object } = req.body;
+    const image = req.file;
+
 
     const plan = req.plan;
     const free_usage = req.free_usage;
 
     // this is for testing
-    if (plan !== "premium" && free_usage >= 10) {
+    if (plan !== "premium" && free_usage >= 50) {
       return res.json({
         success: false,
         message: "This feature is only available for premium subscriptions",
@@ -230,19 +233,21 @@ export const removeImageObject = async (req, res) => {
     //   });
     // }
 
-    const {public_id} = await cloudinary.uploader.upload(image.path)
+    const { public_id } = await cloudinary.uploader.upload(image.path);
 
-    const imageUrl =cloudinary.url(public_id, {
-      transformation : [{
-        effect : `gen_remove:${object}`
-      }],
-      resource_type : "image"
-    })
+    const imageUrl = cloudinary.url(public_id, {
+      transformation: [
+        {
+          effect: `gen_remove:${object}`,
+        },
+      ],
+      resource_type: "image",
+    });
 
     await sql`
-      INSERT INTO creations (user_id, prompt, content, type, publish)
-      VALUES (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image')
-    `;
+    INSERT INTO creations (user_id, prompt, content, type, publish)
+    VALUES (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image', false)
+  `;
 
     // if (plan !== "premium") {
     //   await clerkClient.users.updateUserMetadata(userId, {
@@ -253,12 +258,11 @@ export const removeImageObject = async (req, res) => {
     // }
 
     res.json({ success: true, content: imageUrl });
-
   } catch (error) {
     console.error("Image Generation Error:", error.message);
     res.json({ success: false, message: error.message });
   }
-}
+};
 
 export const resumeReview = async (req, res) => {
   try {
@@ -267,15 +271,15 @@ export const resumeReview = async (req, res) => {
     const plan = req.plan;
     const free_usage = req.free_usage;
 
-    // ⚙️ Free plan limit check (for testing)
-    if (plan !== "premium" && free_usage >= 10) {
+    //  Free plan limit check (for testing)
+    if (plan !== "premium" && free_usage >= 220) {
       return res.json({
         success: false,
         message: "This feature is only available for premium subscriptions",
       });
     }
 
-    // ⚙️ Resume size validation
+    //  Resume size validation
     if (resume.size > 6 * 1024 * 1024) {
       return res.json({
         success: false,
@@ -283,12 +287,12 @@ export const resumeReview = async (req, res) => {
       });
     }
 
-    // 🧾 Read PDF file and extract text
+    //  Read PDF file and extract text
     const dataBuffer = fs.readFileSync(resume.path);
     const pdfData = await pdf(dataBuffer);
     const textContent = pdfData.text.trim();
 
-    // 🧠 AI prompt
+    //  AI prompt
     const prompt = `
     Review the following resume and provide detailed, constructive feedback.
     Include:

@@ -1,11 +1,11 @@
-import sql from "../configs/db";
+import sql from "../configs/db.js";
 
+// ✅ Get user creations
 export const getUserCreations = async (req, res) => {
   try {
-    const { userId } = req.body;
-
+    const { userId } = req.auth(); 
     const creations =
-      await sql`SELECT * FROM creations WHERE user_id = ${userId} ORDERED BY created_at DESC`;
+      await sql`SELECT * FROM creations WHERE user_id = ${userId} ORDER BY created_at DESC`;
 
     res.json({
       success: true,
@@ -19,10 +19,11 @@ export const getUserCreations = async (req, res) => {
   }
 };
 
+// ✅ Get published creations
 export const getPublishedCreations = async (req, res) => {
   try {
     const creations =
-      await sql`SELECT * FROM creations WHERE publish = true ORDERED BY created_at DESC`;
+      await sql`SELECT * FROM creations WHERE publish = true ORDER BY created_at DESC`;
 
     res.json({
       success: true,
@@ -36,45 +37,57 @@ export const getPublishedCreations = async (req, res) => {
   }
 };
 
+// ✅ Toggle like functionality
 export const toggleLikeCreations = async (req, res) => {
   try {
+    const { userId } = req.auth();
+    const { id } = req.body;
 
-    const {userId} = req.auth();
-    const {id} = req.body;
-    
-    const [creation] =
-      await sql`SELECT * FROM creations WHERE id = ${id}`;
+    // Find creation
+    const [creation] = await sql`SELECT * FROM creations WHERE id = ${id}`;
+    if (!creation) {
+      return res.json({
+        success: false,
+        message: "Creation not found",
+      });
+    }
 
+    // Parse current likes safely
+    let currentLikes = creation.likes || [];
+    if (typeof currentLikes === "string") {
+      currentLikes = currentLikes.replace(/[{}]/g, "").split(",").filter(Boolean);
+    }
 
-      if (!creation) {
-        return res.json({
-            success : false,
-            message : "Creation not found"
-        })
-      }
+    const userIdStr = userId.toString();
+    let updatedLikes;
+    let message;
 
-      const currentLikes = creation.likes;
-      const userIdStr = userId.toString();
-      let updatedLikes;
-      let message;
+    if (currentLikes.includes(userIdStr)) {
+      updatedLikes = currentLikes.filter((u) => u !== userIdStr);
+      message = "Creation unliked";
+    } else {
+      updatedLikes = [...currentLikes, userIdStr];
+      message = "Creation liked";
+    }
 
-      if (currentLikes.include(userIdStr)) {
-        updatedLikes = currentLikes.filter((user) => user !== userIdStr);
-        message = 'Creation unliked'
-      } else {
-        updatedLikes = [...currentLikes, userIdStr];
-        message : "Creation Liked"
-      }
+    // Update database
+    await sql`
+      UPDATE creations
+      SET likes = ${sql.array(updatedLikes, 'text')}
+      WHERE id = ${id}
+    `;
 
-      const formattedArray = `${updatedLikes.join(', ')}`
-
-      await sql`UPDATE creations SET likes = ${formattedArray}::text[] where id = ${id}`
+    // Fetch updated creations for the frontend
+    const creations =
+      await sql`SELECT * FROM creations WHERE publish = true ORDER BY created_at DESC`;
 
     res.json({
       success: true,
       message,
+      creations, // ✅ send updated list
     });
   } catch (error) {
+    console.error("Error in toggleLikeCreations:", error);
     res.json({
       success: false,
       message: error.message,
